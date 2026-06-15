@@ -227,7 +227,9 @@ body { display: flex; flex-direction: column; align-items: center; min-height: 1
 .link-row input { flex: 1; padding: 11px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.2);
   background: #0e0a28; color: var(--text); font-size: 13px; }
 .lobby-status, #join-status { color: var(--accent); font-weight: 600; }
-.lobby-cancel { width: 100%; }
+.lobby-actions { display: flex; gap: 10px; margin-top: 6px; }
+.lobby-actions .ghost-btn { flex: 1; }
+.lobby-actions .primary-btn { flex: 1; }
 
 .help-card { text-align: left; max-width: 500px; }
 .help-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin: 8px 0 14px; }

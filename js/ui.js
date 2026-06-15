@@ -3,7 +3,7 @@
 // ===================================================================
 import { Connect5 } from './game.js';
 import { chooseMove } from './ai.js';
-import { NetGame } from './net.js';
+import { NetGame, peerErrMsg } from './net.js';
 import { Sfx, setSound, isSoundOn, unlock } from './audio.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -373,20 +373,33 @@ function resetGame() {
 // ===================================================================
 //  Online
 // ===================================================================
+function lobbyError(msg) {
+  const hostEl = $('#lobby-status');
+  const guestEl = $('#join-status');
+  const isHost = !$('#lobby-host').classList.contains('hidden');
+  const el = isHost ? hostEl : guestEl;
+  if (el) { el.textContent = '⚠️ ' + msg; el.style.color = '#ff6b8a'; }
+  // Mostrar botón reintentar solo en modo host (el guest no puede reintentar sin enlace nuevo)
+  if (isHost) $('#lobby-retry').classList.remove('hidden');
+}
+
 function openLobbyAsHost() {
   $('#lobby-host').classList.remove('hidden');
   $('#lobby-join').classList.add('hidden');
   $('#lobby').classList.remove('hidden');
-  $('#lobby-status').textContent = 'Creando sala…';
+  const statusEl = $('#lobby-status');
+  statusEl.textContent = 'Creando sala…';
+  statusEl.style.color = '';
 
   net = new NetGame();
   setupNetHandlers();
   net.host().then((id) => {
     const url = `${location.origin}${location.pathname}?join=${id}`;
     $('#share-link').value = url;
-    $('#lobby-status').textContent = 'Sala lista. Esperando al rival…';
-  }).catch(() => {
-    $('#lobby-status').textContent = '⚠️ No se pudo crear la sala. Revisa tu conexión.';
+    statusEl.textContent = '✅ Sala lista. Esperando al rival…';
+    statusEl.style.color = '#2ee6c5';
+  }).catch((err) => {
+    lobbyError(peerErrMsg(err));
   });
 }
 
@@ -394,7 +407,9 @@ function openLobbyAsGuest(hostId) {
   $('#lobby-host').classList.add('hidden');
   $('#lobby-join').classList.remove('hidden');
   $('#lobby').classList.remove('hidden');
-  $('#join-status').textContent = 'Conectando con el anfitrión…';
+  const statusEl = $('#join-status');
+  statusEl.textContent = '🔄 Conectando con el anfitrión…';
+  statusEl.style.color = '';
 
   net = new NetGame();
   setupNetHandlers();
@@ -402,6 +417,8 @@ function openLobbyAsGuest(hostId) {
 }
 
 function setupNetHandlers() {
+  const inLobby = () => !$('#lobby').classList.contains('hidden');
+
   net.onConnected = () => {
     myPlayer = net.myPlayer;
     $('#lobby').classList.add('hidden');
@@ -409,6 +426,7 @@ function setupNetHandlers() {
     $('#net-status').classList.remove('hidden');
     $('#net-status').textContent = `🟢 Conectado · eres ${myPlayer === 1 ? 'Rojo' : 'Amarillo'}`;
   };
+
   net.onMessage = (data) => {
     if (!data) return;
     if (data.type === 'move') {
@@ -418,10 +436,27 @@ function setupNetHandlers() {
       resetGame();
     }
   };
-  net.onStatus = (s) => {
-    if (s === 'closed' || s === 'error') {
-      $('#net-status').textContent = '🔴 Rival desconectado';
-      $('#hint').textContent = 'Se perdió la conexión con el rival.';
+
+  net.onStatus = (s, err) => {
+    if (s === 'error') {
+      const msg = peerErrMsg(err);
+      if (inLobby()) {
+        lobbyError(msg);
+      } else {
+        $('#net-status').textContent = '🔴 Error de conexión';
+        $('#hint').textContent = '⚠️ ' + msg;
+      }
+    } else if (s === 'closed') {
+      if (!inLobby()) {
+        $('#net-status').textContent = '🔴 Rival desconectado';
+        $('#hint').textContent = 'La conexión se cerró.';
+      }
+    } else if (s === 'connecting') {
+      const el = $('#join-status');
+      if (el) el.textContent = '🔄 Negociando conexión WebRTC…';
+    } else if (s === 'peer-found') {
+      const el = $('#lobby-status');
+      if (el) { el.textContent = '⚡ Rival encontrado, estableciendo conexión…'; el.style.color = '#ffd23b'; }
     }
   };
 }
@@ -516,7 +551,13 @@ function init() {
   $('#end-menu').onclick = () => { $('#endmodal').classList.add('hidden'); backToMenu(); };
   document.querySelector('.lobby-cancel').onclick = () => {
     $('#lobby').classList.add('hidden');
+    $('#lobby-retry').classList.add('hidden');
     if (net) { net.destroy(); net = null; }
+  };
+  $('#lobby-retry').onclick = () => {
+    if (net) { net.destroy(); net = null; }
+    $('#lobby-retry').classList.add('hidden');
+    openLobbyAsHost();
   };
   $('#copy-link').onclick = () => {
     const inp = $('#share-link');
