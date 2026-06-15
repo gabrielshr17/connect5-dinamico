@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Connect 5 Dinámico 🎮</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="preconnect" href="https://unpkg.com" />
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+  <div class="bg-orbs"><span></span><span></span><span></span><span></span></div>
+
+  <header class="topbar">
+    <h1 class="logo">CONNECT&nbsp;<span class="five">5</span>&nbsp;<small>DINÁMICO</small></h1>
+  </header>
+
+  <!-- ===================== MENÚ ===================== -->
+  <section id="menu" class="screen active">
+    <div class="menu-card">
+      <p class="tagline">Conecta <b>5 fichas</b> · tablero gigante · fichas con superpoderes 💥</p>
+      <div class="menu-grid">
+        <button class="mode-btn" data-mode="ai">
+          <span class="ico">🤖</span><span class="lbl">Contra la máquina</span>
+          <span class="sub">Reta a la IA</span>
+        </button>
+        <button class="mode-btn" data-mode="local">
+          <span class="ico">🛋️</span><span class="lbl">2 jugadores</span>
+          <span class="sub">Mismo dispositivo</span>
+        </button>
+        <button class="mode-btn" data-mode="online">
+          <span class="ico">🌐</span><span class="lbl">Online</span>
+          <span class="sub">Comparte un enlace</span>
+        </button>
+      </div>
+      <button id="how-btn" class="ghost-btn">❓ Cómo se juega</button>
+    </div>
+  </section>
+
+  <!-- ===================== JUEGO ===================== -->
+  <section id="game" class="screen">
+    <div class="hud">
+      <button id="back-btn" class="hud-btn" title="Menú">⟵</button>
+      <div id="turn-pill" class="turn-pill p1">
+        <span class="dot"></span><span id="turn-text">Turno: Rojo</span>
+      </div>
+      <div class="hud-right">
+        <button id="sound-btn" class="hud-btn" title="Sonido">🔊</button>
+        <button id="restart-btn" class="hud-btn" title="Reiniciar">↻</button>
+      </div>
+    </div>
+
+    <div id="board-wrap">
+      <div id="board-tilt">
+        <div id="board"></div>
+      </div>
+      <div id="net-status" class="net-status hidden"></div>
+    </div>
+
+    <div id="abilities" class="abilities"></div>
+    <p id="hint" class="hint"></p>
+  </section>
+
+  <!-- ===================== LOBBY ONLINE ===================== -->
+  <div id="lobby" class="modal hidden">
+    <div class="modal-card">
+      <h2>🌐 Partida online</h2>
+      <div id="lobby-host">
+        <p>Comparte este enlace con tu rival. Cuando entre, ¡empieza la partida!</p>
+        <div class="link-row">
+          <input id="share-link" readonly />
+          <button id="copy-link" class="primary-btn">Copiar</button>
+        </div>
+        <p id="lobby-status" class="lobby-status">Creando sala…</p>
+      </div>
+      <div id="lobby-join" class="hidden">
+        <p id="join-status">Conectando con el anfitrión…</p>
+      </div>
+      <button class="ghost-btn lobby-cancel">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- ===================== FIN DE PARTIDA ===================== -->
+  <div id="endmodal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="end-title">¡Ganador!</h2>
+      <p id="end-sub"></p>
+      <div class="modal-actions">
+        <button id="play-again" class="primary-btn">Jugar otra vez</button>
+        <button id="end-menu" class="ghost-btn">Menú</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== AYUDA ===================== -->
+  <div id="help" class="modal hidden">
+    <div class="modal-card help-card">
+      <h2>Cómo se juega</h2>
+      <ul class="help-list">
+        <li>🎯 Conecta <b>5 fichas</b> en línea (horizontal, vertical o diagonal).</li>
+        <li>💣 <b>Bomba</b>: cae en una columna y elimina las fichas adyacentes.</li>
+        <li>🧱 <b>Bloque</b>: coloca 2 fichas tuyas apiladas de una vez.</li>
+        <li>🧊 <b>Congelación</b>: bloquea una columna al rival durante su próximo turno.</li>
+        <li>🔄 <b>Cambio de color</b>: convierte una ficha rival en tuya.</li>
+      </ul>
+      <p class="help-note">Cada jugador tiene un número limitado de cada habilidad. 🖱️ Arrastra el tablero para girarlo en 3D.</p>
+      <button class="primary-btn help-close">¡Entendido!</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/ui.js"></script>
+</body>
+</html>
