@@ -5,6 +5,7 @@ import { Connect5 } from './game.js';
 import { chooseMove } from './ai.js';
 import { NetGame, peerErrMsg } from './net.js';
 import { Sfx, setSound, isSoundOn, unlock } from './audio.js';
+import { log, bindLogUI, markSeen, downloadLog, clearLog, asText } from './logger.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -17,6 +18,12 @@ let selected = 'normal';  // habilidad seleccionada
 let busy = false;         // animaciones en curso
 let cellEls = [];         // cellEls[r][c]
 let shown = [];           // tablero mostrado actualmente
+
+// ---- Sincronización online (estado autoritativo + reenvío) ----
+let lastAppliedSeq = 0;   // mayor moveCount aplicado desde el rival
+let lastSentSeq = 0;      // moveCount del último estado que envié
+let resendTimer = null;   // reintento del último estado hasta recibir ack
+let lastSentMsg = null;   // último mensaje de estado enviado
 
 const ABIL_META = {
   bomb:  { em: '💣', name: 'Bomba' },
@@ -33,10 +40,19 @@ function showScreen(id) {
 }
 
 function backToMenu() {
-  if (net) { net.destroy(); net = null; }
+  stopResend();
+  if (net) { net.destroy(); net = null; log('red', 'Conexión cerrada (volver al menú).'); }
   mode = null;
   $('#net-status').classList.add('hidden');
   showScreen('menu');
+}
+
+// Reinicia los contadores de sincronización online.
+function resetSync() {
+  lastAppliedSeq = 0;
+  lastSentSeq = 0;
+  lastSentMsg = null;
+  stopResend();
 }
 
 // ===================================================================
@@ -269,7 +285,12 @@ function refreshTargetable() {
 // ===================================================================
 function applyAndRender(move) {
   const ev = game.applyMove(move);
-  if (!ev.ok) return null;
+  if (!ev.ok) { log('error', `Movimiento rechazado: ${describeMove(move)} (turno de jugador ${game.current})`); return null; }
+  // Registrar quién jugó qué (todos los modos).
+  const who = mode === 'ai' ? (ev.player === 1 ? 'Tú' : 'Máquina')
+            : mode === 'online' ? (ev.player === myPlayer ? 'Tú' : 'Rival')
+            : `Jugador ${ev.player}`;
+  log('juego', `Turno #${game.moveCount}: ${who} jugó ${describeMove(move)}.`);
   renderEffects(ev);
   playSfx(ev);
   // Para la bomba, dejamos respirar la animación antes de seguir.
@@ -290,10 +311,53 @@ function localMove(move) {
   unlock();
   const ev = applyAndRender(move);
   if (!ev) return;
-  if (mode === 'online') net.send({ type: 'move', move });
+  if (mode === 'online') {
+    sendState(ev);
+  }
   selected = 'normal';
   refreshTargetable();
   if (ev.type !== 'bomb') afterTurn();
+}
+
+function describeMove(move) {
+  const names = { normal: 'ficha', bomb: '💣 bomba', block: '🧱 bloque', freeze: '🧊 congelar', swap: '🔄 cambio' };
+  const where = move.type === 'swap' ? `en (f${move.target.r},c${move.target.c})` : `en columna ${move.col}`;
+  return `${names[move.type] || move.type} ${where}`;
+}
+
+// Envía el estado COMPLETO + efectos del último movimiento, y lo reenvía
+// hasta recibir confirmación (ack). Garantiza que el rival nunca se desincronice.
+function sendState(ev) {
+  lastSentSeq = game.moveCount;
+  const fx = ev ? {
+    type: ev.type, removed: ev.removed, center: ev.center,
+    swap: ev.swap, freezeCol: ev.freezeCol, winner: ev.winner, draw: ev.draw,
+  } : null;
+  lastSentMsg = { type: 'state', seq: game.moveCount, state: game.toState(), fx };
+  net.send(lastSentMsg);
+  log('red', `Estado enviado (seq ${lastSentMsg.seq}), esperando ack…`);
+  startResend();
+}
+
+function startResend() {
+  stopResend();
+  let tries = 0;
+  resendTimer = setInterval(() => {
+    if (!net || !lastSentMsg) { stopResend(); return; }
+    tries++;
+    if (tries > 8) { // ~20s sin ack
+      stopResend();
+      log('error', 'El rival no confirmó la jugada tras varios reintentos. Posible desconexión.');
+      $('#net-status').textContent = '🟠 Sin respuesta del rival…';
+      return;
+    }
+    net.send(lastSentMsg);
+    log('red', `Reenvío estado (seq ${lastSentMsg.seq}), intento ${tries}`);
+  }, 2500);
+}
+
+function stopResend() {
+  if (resendTimer) { clearInterval(resendTimer); resendTimer = null; }
 }
 
 function afterTurn() {
@@ -323,6 +387,8 @@ function onCellActivate(r, c) {
 //  Fin de partida
 // ===================================================================
 function endGame(ev) {
+  stopResend();
+  log('juego', ev.draw ? '🤝 Empate — tablero lleno.' : `🏆 Fin: gana ${ev.winner === 1 ? 'Rojo' : 'Amarillo'}.`);
   setTimeout(() => {
     const modal = $('#endmodal');
     const title = $('#end-title');
@@ -349,6 +415,7 @@ function startGame(newMode) {
   game = new Connect5();
   selected = 'normal';
   busy = false;
+  resetSync();
   if (mode === 'ai') myPlayer = 1;
   if (mode === 'local') myPlayer = 1;
   buildBoard();
@@ -357,17 +424,21 @@ function startGame(newMode) {
   showHint();
   refreshTargetable();
   showScreen('game');
+  log('juego', `Partida iniciada (modo: ${newMode}${mode === 'online' ? ', eres ' + (myPlayer === 1 ? 'Rojo' : 'Amarillo') : ''}).`);
 }
 
 function resetGame() {
   game = new Connect5();
   selected = 'normal';
   busy = false;
+  resetSync();
   buildBoard();
   syncBoard();
   updateHud();
   showHint();
   $('#endmodal').classList.add('hidden');
+  if (mode === 'online') $('#net-status').textContent = `🟢 Conectado · eres ${myPlayer === 1 ? 'Rojo' : 'Amarillo'}`;
+  log('juego', 'Partida reiniciada.');
 }
 
 // ===================================================================
@@ -391,6 +462,7 @@ function openLobbyAsHost() {
   statusEl.textContent = 'Creando sala…';
   statusEl.style.color = '';
 
+  log('red', 'Creando sala como anfitrión…');
   net = new NetGame();
   setupNetHandlers();
   net.host().then((id) => {
@@ -398,7 +470,9 @@ function openLobbyAsHost() {
     $('#share-link').value = url;
     statusEl.textContent = '✅ Sala lista. Esperando al rival…';
     statusEl.style.color = '#2ee6c5';
+    log('red', `Enlace de invitación generado (id ${id.slice(0, 8)}…).`);
   }).catch((err) => {
+    log('error', `No se pudo crear la sala: ${peerErrMsg(err)}`);
     lobbyError(peerErrMsg(err));
   });
 }
@@ -411,9 +485,33 @@ function openLobbyAsGuest(hostId) {
   statusEl.textContent = '🔄 Conectando con el anfitrión…';
   statusEl.style.color = '';
 
+  log('red', `Uniéndose a la sala (id ${hostId.slice(0, 8)}…) como invitado…`);
   net = new NetGame();
   setupNetHandlers();
   net.join(hostId);
+}
+
+// Reemplaza el estado local por el estado autoritativo recibido y anima.
+function applyRemoteState(data) {
+  lastAppliedSeq = data.seq;
+  game = Connect5.fromState(data.state);
+  const fx = data.fx;
+  if (fx) {
+    renderEffects(fx);
+    playSfx(fx);
+  }
+  syncBoard({ winner: game.winner, winningCells: game.winningCells });
+  updateHud();
+  refreshTargetable();
+  renderAbilities();
+  showHint();
+  log('juego', `Jugada del rival aplicada (turno #${game.moveCount}). ${fx ? describeFx(fx) : ''}`.trim());
+  if (game.winner || game.draw) endGame({ winner: game.winner, draw: game.draw, winningCells: game.winningCells });
+}
+
+function describeFx(fx) {
+  const names = { normal: 'ficha', bomb: '💣 bomba', block: '🧱 bloque', freeze: '🧊 congelar', swap: '🔄 cambio' };
+  return names[fx.type] || '';
 }
 
 function setupNetHandlers() {
@@ -422,6 +520,7 @@ function setupNetHandlers() {
   net.onConnected = () => {
     myPlayer = net.myPlayer;
     $('#lobby').classList.add('hidden');
+    log('red', `¡Conexión WebRTC establecida! Rol: ${net.role} (eres ${myPlayer === 1 ? 'Rojo' : 'Amarillo'}).`);
     startGame('online');
     $('#net-status').classList.remove('hidden');
     $('#net-status').textContent = `🟢 Conectado · eres ${myPlayer === 1 ? 'Rojo' : 'Amarillo'}`;
@@ -429,10 +528,34 @@ function setupNetHandlers() {
 
   net.onMessage = (data) => {
     if (!data) return;
-    if (data.type === 'move') {
-      applyAndRender(data.move);
-      if (!game.winner && !game.draw) { renderAbilities(); showHint(); }
-    } else if (data.type === 'restart') {
+
+    if (data.type === 'ack') {
+      // El rival confirmó mi último estado → dejo de reenviar.
+      if (data.seq >= lastSentSeq) { stopResend(); log('red', `Ack recibido (seq ${data.seq})`); }
+      return;
+    }
+
+    if (data.type === 'state') {
+      // Confirmo recepción SIEMPRE (aunque sea duplicado).
+      net.send({ type: 'ack', seq: data.seq });
+
+      if (data.seq <= lastAppliedSeq) {
+        log('red', `Estado duplicado/antiguo ignorado (seq ${data.seq})`);
+        return;
+      }
+      if (data.seq > lastAppliedSeq + 1 && lastAppliedSeq > 0) {
+        log('error', `Hueco en la secuencia: esperaba ${lastAppliedSeq + 1}, llegó ${data.seq}. Recuperado con estado completo.`);
+      }
+
+      // El rival avanzó → mi jugada anterior ya no necesita reenvío.
+      if (data.seq >= lastSentSeq) stopResend();
+
+      applyRemoteState(data);
+      return;
+    }
+
+    if (data.type === 'restart') {
+      log('juego', 'El rival reinició la partida.');
       resetGame();
     }
   };
@@ -440,23 +563,31 @@ function setupNetHandlers() {
   net.onStatus = (s, err) => {
     if (s === 'error') {
       const msg = peerErrMsg(err);
+      log('error', `Estado de red: error — ${msg}`, err?.type || '');
       if (inLobby()) {
         lobbyError(msg);
       } else {
+        stopResend();
         $('#net-status').textContent = '🔴 Error de conexión';
         $('#hint').textContent = '⚠️ ' + msg;
       }
     } else if (s === 'closed') {
+      log('red', 'La conexión se cerró.');
       if (!inLobby()) {
+        stopResend();
         $('#net-status').textContent = '🔴 Rival desconectado';
-        $('#hint').textContent = 'La conexión se cerró.';
+        $('#hint').textContent = 'La conexión se cerró. El rival cerró la pestaña o perdió internet.';
       }
     } else if (s === 'connecting') {
+      log('red', 'Conectado al servidor de señalización, negociando WebRTC…');
       const el = $('#join-status');
       if (el) el.textContent = '🔄 Negociando conexión WebRTC…';
     } else if (s === 'peer-found') {
+      log('red', 'Rival encontrado en el servidor, estableciendo canal de datos…');
       const el = $('#lobby-status');
       if (el) { el.textContent = '⚡ Rival encontrado, estableciendo conexión…'; el.style.color = '#ffd23b'; }
+    } else if (s === 'waiting') {
+      log('red', 'Sala creada en el servidor de señalización.');
     }
   };
 }
@@ -496,6 +627,9 @@ function initTilt() {
 //  Wiring de eventos
 // ===================================================================
 function init() {
+  bindLogUI({ list: $('#log-list'), badge: $('#log-badge') });
+  log('info', 'Connect 5 Dinámico iniciado.');
+
   // Menú
   document.querySelectorAll('.mode-btn').forEach((b) => {
     b.addEventListener('click', () => {
@@ -566,6 +700,21 @@ function init() {
     $('#copy-link').textContent = '¡Copiado!';
     setTimeout(() => ($('#copy-link').textContent = 'Copiar'), 1500);
   };
+
+  // Panel de registro de eventos
+  $('#log-btn').onclick = () => {
+    const p = $('#logpanel');
+    p.classList.toggle('hidden');
+    if (!p.classList.contains('hidden')) markSeen();
+  };
+  $('#log-close').onclick = () => $('#logpanel').classList.add('hidden');
+  $('#log-copy').onclick = () => {
+    if (navigator.clipboard) navigator.clipboard.writeText(asText());
+    $('#log-copy').textContent = '¡Copiado!';
+    setTimeout(() => ($('#log-copy').textContent = 'Copiar'), 1500);
+  };
+  $('#log-download').onclick = () => downloadLog();
+  $('#log-clear').onclick = () => clearLog();
 
   initTilt();
 

@@ -47,6 +47,35 @@ export class Connect5 {
     return g;
   }
 
+  // Serializa el estado completo para enviarlo por la red.
+  toState() {
+    return {
+      cols: this.cols, rows: this.rows, need: this.need,
+      board: this.board.map((row) => row.slice()),
+      current: this.current,
+      inventory: { 1: { ...this.inventory[1] }, 2: { ...this.inventory[2] } },
+      frozen: this.frozen.map((f) => ({ ...f })),
+      winner: this.winner,
+      winningCells: this.winningCells.map((c) => ({ ...c })),
+      draw: this.draw,
+      moveCount: this.moveCount,
+    };
+  }
+
+  // Reconstruye una instancia a partir de un estado serializado.
+  static fromState(s) {
+    const g = new Connect5({ cols: s.cols, rows: s.rows, need: s.need });
+    g.board = s.board.map((row) => row.slice());
+    g.current = s.current;
+    g.inventory = { 1: { ...s.inventory[1] }, 2: { ...s.inventory[2] } };
+    g.frozen = (s.frozen || []).map((f) => ({ ...f }));
+    g.winner = s.winner;
+    g.winningCells = (s.winningCells || []).map((c) => ({ ...c }));
+    g.draw = s.draw;
+    g.moveCount = s.moveCount;
+    return g;
+  }
+
   opponent(p = this.current) {
     return p === 1 ? 2 : 1;
   }

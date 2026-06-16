@@ -45,6 +45,7 @@
         <span class="dot"></span><span id="turn-text">Turno: Rojo</span>
       </div>
       <div class="hud-right">
+        <button id="log-btn" class="hud-btn" title="Registro de eventos">📋<span id="log-badge" class="log-badge hidden">0</span></button>
         <button id="sound-btn" class="hud-btn" title="Sonido">🔊</button>
         <button id="restart-btn" class="hud-btn" title="Reiniciar">↻</button>
       </div>
@@ -92,6 +93,20 @@
         <button id="play-again" class="primary-btn">Jugar otra vez</button>
         <button id="end-menu" class="ghost-btn">Menú</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===================== REGISTRO DE EVENTOS ===================== -->
+  <div id="logpanel" class="logpanel hidden">
+    <div class="logpanel-head">
+      <h3>📋 Registro de eventos</h3>
+      <button id="log-close" class="hud-btn" title="Cerrar">✕</button>
+    </div>
+    <div id="log-list" class="log-list"></div>
+    <div class="logpanel-actions">
+      <button id="log-copy" class="ghost-btn">Copiar</button>
+      <button id="log-download" class="ghost-btn">Descargar</button>
+      <button id="log-clear" class="ghost-btn">Limpiar</button>
     </div>
   </div>
 

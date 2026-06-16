@@ -31,6 +31,14 @@ Cada jugador empieza con un número limitado de cada una:
 - Animaciones de caída, explosiones, escarcha y destellos.
 - Efectos de sonido sintetizados (se pueden silenciar con 🔇).
 
+## 📋 Registro de eventos (depuración)
+
+Durante la partida, el botón **📋** (arriba a la derecha) abre un registro con marca de tiempo de todo lo que ocurre: creación de sala, conexión WebRTC, cada jugada, envíos/confirmaciones de estado y errores. Puedes **copiarlo** o **descargarlo** para diagnosticar cualquier fallo. Todo se refleja también en la consola del navegador.
+
+## 🔒 Sincronización online robusta
+
+El modo online no usa "lockstep" (que se desincroniza si se pierde un mensaje). En su lugar, cada jugada envía el **estado completo del tablero** numerado y se **reenvía hasta recibir confirmación (ack)**. Así, aunque la red pierda, duplique o reordene mensajes, ambos jugadores siempre convergen al mismo estado y la partida nunca se queda congelada.
+
 ## 🛠️ Tecnología
 
 - **HTML + CSS 3D + JavaScript (ES Modules)** — sin framework, sin build.
@@ -65,11 +73,12 @@ connect5-dinamico/
 ├── index.html
 ├── css/styles.css
 └── js/
-    ├── game.js   # lógica pura del juego
+    ├── game.js   # lógica pura del juego (+ serialización de estado)
     ├── ai.js     # inteligencia artificial
     ├── net.js    # multijugador P2P (PeerJS)
     ├── audio.js  # efectos de sonido
-    └── ui.js     # interfaz y control
+    ├── logger.js # registro de eventos
+    └── ui.js     # interfaz, control y sincronización online
 ```
 
 ---
