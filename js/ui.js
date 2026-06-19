@@ -111,13 +111,12 @@ function syncBoard(ev = {}) {
       } else if (cur === 0 && logical !== 0) {
         // nueva ficha — animación de caída desde lo alto de la columna
         const d = makeDisc(logical);
+        // r=0 es la fila inferior visual; la distancia visual desde arriba = (rows-1-r) filas
         const cellH = cell.offsetHeight || 40;
         const gap = 6; // --gap
-        const natural = 14 + 20 + r * (cellH + gap) + cellH * 0.5;
-        const fallFrom = -Math.max(natural, 80); // mínimo 80px para que siempre se vea
-        const dur = Math.max(0.18, Math.abs(fallFrom) / 700).toFixed(2);
-        d.style.setProperty('--fall-from', `${fallFrom}px`);
-        d.style.setProperty('--fall-dur', `${dur}s`);
+        const visualDist = (game.rows - 1 - r) * (cellH + gap) + cellH * 0.5 + 14;
+        const dur = Math.max(0.2, visualDist / 600 + 0.15).toFixed(2);
+        d.style.animationDuration = dur + 's';
         d.classList.add('falling');
         cell.appendChild(d);
       } else {
