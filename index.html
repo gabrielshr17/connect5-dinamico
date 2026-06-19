@@ -45,10 +45,15 @@
         <span class="dot"></span><span id="turn-text">Turno: Rojo</span>
       </div>
       <div class="hud-right">
+        <button id="chat-btn" class="hud-btn hidden" title="Chat">💬<span id="chat-badge" class="log-badge hidden">0</span></button>
         <button id="log-btn" class="hud-btn" title="Registro de eventos">📋<span id="log-badge" class="log-badge hidden">0</span></button>
         <button id="sound-btn" class="hud-btn" title="Sonido">🔊</button>
         <button id="restart-btn" class="hud-btn" title="Reiniciar">↻</button>
       </div>
+    </div>
+    <div class="hud2">
+      <div id="scoreboard" class="scoreboard"></div>
+      <div id="timer" class="timer hidden">⏱️ <span id="timer-num">7</span>s</div>
     </div>
 
     <div id="board-wrap">
@@ -61,6 +66,33 @@
     <div id="abilities" class="abilities"></div>
     <p id="hint" class="hint"></p>
   </section>
+
+  <!-- ===================== DIFICULTAD IA ===================== -->
+  <div id="difmodal" class="modal hidden">
+    <div class="modal-card">
+      <h2>🤖 Elige la dificultad</h2>
+      <p>¿Qué tan dura quieres que sea la máquina?</p>
+      <div class="dif-grid">
+        <button class="dif-btn" data-dif="facil"><span class="ico">🙂</span><span class="lbl">Fácil</span><span class="sub">Relajado</span></button>
+        <button class="dif-btn" data-dif="medio"><span class="ico">😎</span><span class="lbl">Medio</span><span class="sub">Equilibrado</span></button>
+        <button class="dif-btn" data-dif="dificil"><span class="ico">🔥</span><span class="lbl">Difícil</span><span class="sub">Despiadado</span></button>
+      </div>
+      <button class="ghost-btn dif-cancel">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- ===================== CHAT ONLINE ===================== -->
+  <div id="chatpanel" class="logpanel chatpanel hidden">
+    <div class="logpanel-head">
+      <h3>💬 Chat</h3>
+      <button id="chat-close" class="hud-btn" title="Cerrar">✕</button>
+    </div>
+    <div id="chat-list" class="log-list chat-list"></div>
+    <div class="chat-input-row">
+      <input id="chat-input" maxlength="300" placeholder="Escribe un mensaje…" autocomplete="off" />
+      <button id="chat-send" class="primary-btn">Enviar</button>
+    </div>
+  </div>
 
   <!-- ===================== LOBBY ONLINE ===================== -->
   <div id="lobby" class="modal hidden">
@@ -118,7 +150,7 @@
         <li>🎯 Conecta <b>5 fichas</b> en línea (horizontal, vertical o diagonal).</li>
         <li>💣 <b>Bomba</b>: cae en una columna y elimina las fichas adyacentes.</li>
         <li>🧱 <b>Bloque</b>: coloca 2 fichas tuyas apiladas de una vez.</li>
-        <li>🧊 <b>Congelación</b>: bloquea una columna al rival durante su próximo turno.</li>
+        <li>🧊 <b>Congelación</b>: bloquea una columna al rival durante sus próximos <b>3 turnos</b>.</li>
         <li>🔄 <b>Cambio de color</b>: convierte una ficha rival en tuya.</li>
       </ul>
       <p class="help-note">Cada jugador tiene un número limitado de cada habilidad. 🖱️ Arrastra el tablero para girarlo en 3D.</p>

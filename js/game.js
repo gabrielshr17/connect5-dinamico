@@ -68,7 +68,7 @@ export class Connect5 {
     g.board = s.board.map((row) => row.slice());
     g.current = s.current;
     g.inventory = { 1: { ...s.inventory[1] }, 2: { ...s.inventory[2] } };
-    g.frozen = (s.frozen || []).map((f) => ({ ...f }));
+    g.frozen = (s.frozen || []).map((f) => ({ ...f, turns: f.turns ?? 1 }));
     g.winner = s.winner;
     g.winningCells = (s.winningCells || []).map((c) => ({ ...c }));
     g.draw = s.draw;
@@ -232,7 +232,8 @@ export class Connect5 {
         break;
       }
       case 'freeze': {
-        this.frozen.push({ col: move.col, target: this.opponent(p) });
+        // Bloquea la columna para el rival durante sus próximos 3 turnos.
+        this.frozen.push({ col: move.col, target: this.opponent(p), turns: 3 });
         events.freezeCol = move.col;
         this.inventory[p].freeze--;
         break;
@@ -247,8 +248,11 @@ export class Connect5 {
     }
 
     this.moveCount++;
-    // Las congelaciones que afectaban al jugador actual expiran tras su turno.
-    this.frozen = this.frozen.filter((f) => f.target !== p);
+    // Las congelaciones que afectaban al jugador actual gastan un turno; se
+    // eliminan cuando llegan a 0.
+    this.frozen = this.frozen
+      .map((f) => (f.target === p ? { ...f, turns: f.turns - 1 } : f))
+      .filter((f) => f.turns > 0);
 
     this._checkEnd();
     events.winner = this.winner;
