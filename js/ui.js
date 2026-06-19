@@ -25,6 +25,13 @@ let lastSentSeq = 0;      // moveCount del último estado que envié
 let resendTimer = null;   // reintento del último estado hasta recibir ack
 let lastSentMsg = null;   // último mensaje de estado enviado
 
+// ---- Dificultad IA, marcador, temporizador y chat ----
+let aiDifficulty = 'medio';                  // 'facil' | 'medio' | 'dificil'
+let score = { me: 0, opp: 0, draws: 0 };     // marcador de la sesión
+const TURN_SECONDS = 7;                       // límite de tiempo por jugada
+let turnTimer = null, turnDeadline = 0;       // temporizador del turno
+let chatUnseen = 0;                           // mensajes de chat sin leer
+
 const ABIL_META = {
   bomb:  { em: '💣', name: 'Bomba' },
   block: { em: '🧱', name: 'Bloque' },
@@ -41,9 +48,13 @@ function showScreen(id) {
 
 function backToMenu() {
   stopResend();
+  clearTurnTimer();
   if (net) { net.destroy(); net = null; log('red', 'Conexión cerrada (volver al menú).'); }
   mode = null;
+  score = { me: 0, opp: 0, draws: 0 }; // el marcador es por sesión de modo
+  clearChat();
   $('#net-status').classList.add('hidden');
+  $('#chat-btn').classList.add('hidden');
   showScreen('menu');
 }
 
@@ -116,10 +127,25 @@ function syncBoard(ev = {}) {
 function renderFrozen() {
   // limpia
   document.querySelectorAll('.cell.frozen').forEach((c) => c.classList.remove('frozen'));
+  document.querySelectorAll('.cell.frozen-col').forEach((c) => c.classList.remove('frozen-col'));
+  document.querySelectorAll('.freeze-badge').forEach((b) => b.remove());
   for (const f of game.frozen) {
+    // Escarcha en toda la columna.
+    for (let r = 0; r < game.rows; r++) {
+      cellEls[r] && cellEls[r][f.col] && cellEls[r][f.col].classList.add('frozen-col');
+    }
+    // Hielo en el hueco bloqueado (próxima caída) o arriba si está llena.
     let r = game.dropRow(f.col);
     if (r < 0) r = game.rows - 1;
     cellEls[r] && cellEls[r][f.col] && cellEls[r][f.col].classList.add('frozen');
+    // Contador de turnos restantes sobre la columna.
+    const top = cellEls[game.rows - 1] && cellEls[game.rows - 1][f.col];
+    if (top) {
+      const badge = document.createElement('div');
+      badge.className = 'freeze-badge';
+      badge.textContent = '❄️ ' + f.turns;
+      top.appendChild(badge);
+    }
   }
 }
 
@@ -225,6 +251,21 @@ function updateHud() {
   const color = game.current === 1 ? 'Rojo' : 'Amarillo';
   $('#turn-text').textContent = `Turno: ${playerName(game.current)} (${color})`;
   renderAbilities();
+  renderScore();
+}
+
+function renderScore() {
+  const el = $('#scoreboard');
+  let a, b;
+  if (mode === 'ai') { a = 'Tú'; b = 'IA'; }
+  else if (mode === 'online') { a = 'Tú'; b = 'Rival'; }
+  else if (mode === 'local') { a = 'Rojo'; b = 'Amarillo'; }
+  else { el.textContent = ''; return; }
+  el.innerHTML =
+    `<span class="sc-a">${a} ${score.me}</span>` +
+    `<span class="sc-mid">—</span>` +
+    `<span class="sc-b">${score.opp} ${b}</span>` +
+    (score.draws ? `<span class="sc-d">· ${score.draws} 🤝</span>` : '');
 }
 
 function renderAbilities() {
@@ -264,7 +305,7 @@ function showHint() {
     normal: 'Toca una columna para soltar tu ficha.',
     bomb: '💣 Toca una columna: la ficha caerá y explotará.',
     block: '🧱 Toca una columna con 2 huecos: colocas 2 fichas.',
-    freeze: '🧊 Toca una columna para congelarla al rival un turno.',
+    freeze: '🧊 Toca una columna para congelarla al rival sus próximos 3 turnos.',
     swap: '🔄 Toca una ficha del rival para convertirla en tuya.',
   };
   h.textContent = tips[selected];
@@ -309,6 +350,7 @@ function localMove(move) {
   if (!canInteract()) return;
   if (!game.isLegal(move)) { $('#hint').textContent = '✋ Movimiento no válido.'; return; }
   unlock();
+  clearTurnTimer(); // el turno se consume; el siguiente reinicia el reloj
   const ev = applyAndRender(move);
   if (!ev) return;
   if (mode === 'online') {
@@ -361,17 +403,112 @@ function stopResend() {
 }
 
 function afterTurn() {
-  if (game.winner || game.draw) return;
+  if (game.winner || game.draw) { clearTurnTimer(); return; }
   renderAbilities();
   showHint();
   if (mode === 'ai' && game.current === 2) {
+    clearTurnTimer(); // la máquina no tiene reloj
     setTimeout(() => {
       if (game.winner || game.draw) return;
-      const mv = chooseMove(game, 2);
+      const mv = chooseMove(game, 2, aiDifficulty);
       const ev = applyAndRender(mv);
       if (ev && ev.type !== 'bomb') afterTurn();
     }, 550);
+  } else {
+    startTurnTimer(); // turno humano: arranca el reloj
   }
+}
+
+// ===================================================================
+//  Temporizador de turno (7 s)
+// ===================================================================
+function clearTurnTimer() {
+  if (turnTimer) { clearInterval(turnTimer); turnTimer = null; }
+  $('#timer').classList.add('hidden');
+}
+
+function timerShouldRun() {
+  if (!game || game.winner || game.draw || busy) return false;
+  if (!$('#help').classList.contains('hidden')) return false; // pausa con ayuda abierta
+  if (mode === 'ai') return game.current === 1;
+  if (mode === 'online') return game.current === myPlayer;
+  if (mode === 'local') return true;
+  return false;
+}
+
+function startTurnTimer() {
+  clearTurnTimer();
+  if (!timerShouldRun()) return;
+  turnDeadline = Date.now() + TURN_SECONDS * 1000;
+  const timerEl = $('#timer'), numEl = $('#timer-num');
+  timerEl.classList.remove('hidden');
+  const tick = () => {
+    const left = Math.max(0, turnDeadline - Date.now());
+    const secs = Math.ceil(left / 1000);
+    numEl.textContent = secs;
+    timerEl.classList.toggle('low', secs <= 3);
+    if (left <= 0) { clearTurnTimer(); onTurnTimeout(); }
+  };
+  tick();
+  turnTimer = setInterval(tick, 200);
+}
+
+function onTurnTimeout() {
+  if (!canInteract()) return;
+  const mv = randomAutoMove();
+  log('juego', `⏱️ Se acabó el tiempo: jugada automática (${describeMove(mv)}).`);
+  $('#hint').textContent = '⏱️ ¡Tiempo! Jugada automática.';
+  localMove(mv);
+}
+
+// Una ficha normal en columna válida al azar; si no hay, cualquier jugada legal.
+function randomAutoMove() {
+  const cols = [];
+  for (let c = 0; c < game.cols; c++) {
+    if (!game.isColumnFrozenFor(c, game.current) && game.dropRow(c) >= 0) cols.push(c);
+  }
+  if (cols.length) return { type: 'normal', col: cols[Math.floor(Math.random() * cols.length)] };
+  const all = game.legalMoves(game.current);
+  return all[Math.floor(Math.random() * all.length)] || { type: 'normal', col: 0 };
+}
+
+// ===================================================================
+//  Chat (modo online)
+// ===================================================================
+function appendChat(who, text, cls) {
+  const list = $('#chat-list');
+  const row = document.createElement('div');
+  row.className = 'chat-msg ' + cls;
+  const b = document.createElement('b');
+  b.textContent = who + ': ';
+  row.appendChild(b);
+  row.appendChild(document.createTextNode(text)); // textContent: seguro contra inyección
+  list.appendChild(row);
+  list.scrollTop = list.scrollHeight;
+}
+
+function sendChat() {
+  const inp = $('#chat-input');
+  const text = inp.value.trim().slice(0, 300);
+  if (!text || mode !== 'online' || !net) return;
+  net.send({ type: 'chat', text });
+  appendChat('Tú', text, 'chat-me');
+  inp.value = '';
+  log('red', 'Mensaje de chat enviado.');
+}
+
+function bumpChatBadge() {
+  chatUnseen++;
+  const b = $('#chat-badge');
+  b.textContent = chatUnseen > 99 ? '99+' : String(chatUnseen);
+  b.classList.remove('hidden');
+}
+
+function clearChat() {
+  $('#chat-list').innerHTML = '';
+  chatUnseen = 0;
+  $('#chat-badge').classList.add('hidden');
+  $('#chatpanel').classList.add('hidden');
 }
 
 function onCellActivate(r, c) {
@@ -388,6 +525,14 @@ function onCellActivate(r, c) {
 // ===================================================================
 function endGame(ev) {
   stopResend();
+  clearTurnTimer();
+  // Actualiza el marcador (cada cliente cuenta una vez, de forma consistente).
+  if (ev.draw) score.draws++;
+  else {
+    const meIsPlayer = mode === 'local' ? 1 : myPlayer;
+    if (ev.winner === meIsPlayer) score.me++; else score.opp++;
+  }
+  renderScore();
   log('juego', ev.draw ? '🤝 Empate — tablero lleno.' : `🏆 Fin: gana ${ev.winner === 1 ? 'Rojo' : 'Amarillo'}.`);
   setTimeout(() => {
     const modal = $('#endmodal');
@@ -423,8 +568,12 @@ function startGame(newMode) {
   updateHud();
   showHint();
   refreshTargetable();
+  // El chat solo existe en online.
+  $('#chat-btn').classList.toggle('hidden', mode !== 'online');
+  clearChat();
   showScreen('game');
-  log('juego', `Partida iniciada (modo: ${newMode}${mode === 'online' ? ', eres ' + (myPlayer === 1 ? 'Rojo' : 'Amarillo') : ''}).`);
+  startTurnTimer();
+  log('juego', `Partida iniciada (modo: ${newMode}${mode === 'ai' ? ', dificultad ' + aiDifficulty : ''}${mode === 'online' ? ', eres ' + (myPlayer === 1 ? 'Rojo' : 'Amarillo') : ''}).`);
 }
 
 function resetGame() {
@@ -438,6 +587,7 @@ function resetGame() {
   showHint();
   $('#endmodal').classList.add('hidden');
   if (mode === 'online') $('#net-status').textContent = `🟢 Conectado · eres ${myPlayer === 1 ? 'Rojo' : 'Amarillo'}`;
+  startTurnTimer();
   log('juego', 'Partida reiniciada.');
 }
 
@@ -507,6 +657,7 @@ function applyRemoteState(data) {
   showHint();
   log('juego', `Jugada del rival aplicada (turno #${game.moveCount}). ${fx ? describeFx(fx) : ''}`.trim());
   if (game.winner || game.draw) endGame({ winner: game.winner, draw: game.draw, winningCells: game.winningCells });
+  else startTurnTimer(); // si ahora es mi turno, arranca el reloj
 }
 
 function describeFx(fx) {
@@ -551,6 +702,14 @@ function setupNetHandlers() {
       if (data.seq >= lastSentSeq) stopResend();
 
       applyRemoteState(data);
+      return;
+    }
+
+    if (data.type === 'chat') {
+      const text = String(data.text || '').slice(0, 300);
+      appendChat('Rival', text, 'chat-them');
+      if ($('#chatpanel').classList.contains('hidden')) bumpChatBadge();
+      log('red', 'Mensaje de chat recibido.');
       return;
     }
 
@@ -635,13 +794,29 @@ function init() {
     b.addEventListener('click', () => {
       unlock(); Sfx.click();
       const m = b.dataset.mode;
+      score = { me: 0, opp: 0, draws: 0 }; // nuevo marcador al elegir modo
       if (m === 'online') openLobbyAsHost();
+      else if (m === 'ai') $('#difmodal').classList.remove('hidden'); // elegir dificultad
       else startGame(m);
     });
   });
 
-  $('#how-btn').onclick = () => $('#help').classList.remove('hidden');
-  document.querySelector('.help-close').onclick = () => $('#help').classList.add('hidden');
+  // Selección de dificultad
+  document.querySelectorAll('.dif-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      Sfx.click();
+      aiDifficulty = b.dataset.dif;
+      $('#difmodal').classList.add('hidden');
+      startGame('ai');
+    });
+  });
+  document.querySelector('.dif-cancel').onclick = () => $('#difmodal').classList.add('hidden');
+
+  $('#how-btn').onclick = () => { clearTurnTimer(); $('#help').classList.remove('hidden'); };
+  document.querySelector('.help-close').onclick = () => {
+    $('#help').classList.add('hidden');
+    startTurnTimer(); // reanuda el reloj al cerrar la ayuda
+  };
 
   // HUD
   $('#back-btn').onclick = () => { Sfx.click(); backToMenu(); };
@@ -715,6 +890,21 @@ function init() {
   };
   $('#log-download').onclick = () => downloadLog();
   $('#log-clear').onclick = () => clearLog();
+
+  // Panel de chat (online)
+  $('#chat-btn').onclick = () => {
+    const p = $('#chatpanel');
+    p.classList.toggle('hidden');
+    if (!p.classList.contains('hidden')) {
+      chatUnseen = 0; $('#chat-badge').classList.add('hidden');
+      $('#chat-input').focus();
+    }
+  };
+  $('#chat-close').onclick = () => $('#chatpanel').classList.add('hidden');
+  $('#chat-send').onclick = () => sendChat();
+  $('#chat-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+  });
 
   initTilt();
 

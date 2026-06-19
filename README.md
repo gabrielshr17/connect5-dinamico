@@ -6,9 +6,14 @@ Un juego tipo *Conecta 4* pero llevado al siguiente nivel: hay que **conectar 5 
 
 ## ✨ Modos de juego
 
-- 🤖 **Contra la máquina** — una IA que ataca, defiende y usa las habilidades.
+- 🤖 **Contra la máquina** — IA con **3 niveles de dificultad** (Fácil 🙂 / Medio 😎 / Difícil 🔥). En difícil usa lookahead de 2 niveles, defiende amenazas y aprovecha las habilidades.
 - 🛋️ **2 jugadores** — en el mismo dispositivo (pista compartida).
-- 🌐 **Online** — el anfitrión crea una sala y comparte un enlace. Cuando el rival lo abre, empieza la partida. Usa **WebRTC (PeerJS)**, no hace falta servidor propio.
+- 🌐 **Online** — el anfitrión crea una sala y comparte un enlace. Cuando el rival lo abre, empieza la partida. Usa **WebRTC (PeerJS)**, no hace falta servidor propio. Incluye **chat** 💬 en partida.
+
+## ⏱️ Reglas extra
+
+- **Límite de 7 segundos por jugada** en todos los modos: si se acaba el tiempo, se suelta automáticamente una ficha en una columna válida al azar.
+- **Marcador de partidas** de la sesión, visible en la cabecera (se reinicia al volver al menú).
 
 ## 🎯 Reglas
 
@@ -22,7 +27,7 @@ Cada jugador empieza con un número limitado de cada una:
 |-----------|--------|
 | 💣 **Bomba** | La ficha cae y elimina todas las fichas adyacentes (luego se aplica gravedad). |
 | 🧱 **Bloque** | Coloca **2 fichas tuyas apiladas** en una sola jugada. |
-| 🧊 **Congelación** | Bloquea una columna para el rival durante su próximo turno. |
+| 🧊 **Congelación** | Bloquea una columna para el rival durante sus **próximos 3 turnos** (la columna se ve helada con un contador ❄️). |
 | 🔄 **Cambio de color** | Convierte una ficha del rival en una tuya. |
 
 ## 🎨 Interfaz
