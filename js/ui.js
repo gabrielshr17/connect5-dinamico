@@ -27,6 +27,7 @@ let lastSentMsg = null;   // último mensaje de estado enviado
 
 // ---- Dificultad IA, marcador, temporizador y chat ----
 let aiDifficulty = 'medio';                  // 'facil' | 'medio' | 'dificil'
+let difmodalOpenedAt = 0;                    // timestamp para evitar ghost-click en móvil
 let score = { me: 0, opp: 0, draws: 0 };     // marcador de la sesión
 const TURN_SECONDS = 7;                       // límite de tiempo por jugada
 let turnTimer = null, turnDeadline = 0;       // temporizador del turno
@@ -108,8 +109,16 @@ function syncBoard(ev = {}) {
         const d = cell.querySelector('.disc');
         if (d) { d.classList.add('removing'); const el = d; setTimeout(() => el.remove(), 350); }
       } else if (cur === 0 && logical !== 0) {
-        // nueva ficha
+        // nueva ficha — animación de caída desde lo alto de la columna
         const d = makeDisc(logical);
+        const cellH = cell.offsetHeight || 40;
+        const gap = 6; // --gap
+        const natural = 14 + 20 + r * (cellH + gap) + cellH * 0.5;
+        const fallFrom = -Math.max(natural, 80); // mínimo 80px para que siempre se vea
+        const dur = Math.max(0.18, Math.abs(fallFrom) / 700).toFixed(2);
+        d.style.setProperty('--fall-from', `${fallFrom}px`);
+        d.style.setProperty('--fall-dur', `${dur}s`);
+        d.classList.add('falling');
         cell.appendChild(d);
       } else {
         // cambió de color (swap)
@@ -796,7 +805,10 @@ function init() {
       const m = b.dataset.mode;
       score = { me: 0, opp: 0, draws: 0 }; // nuevo marcador al elegir modo
       if (m === 'online') openLobbyAsHost();
-      else if (m === 'ai') $('#difmodal').classList.remove('hidden'); // elegir dificultad
+      else if (m === 'ai') {
+        difmodalOpenedAt = Date.now();
+        $('#difmodal').classList.remove('hidden');
+      }
       else startGame(m);
     });
   });
@@ -804,6 +816,7 @@ function init() {
   // Selección de dificultad
   document.querySelectorAll('.dif-btn').forEach((b) => {
     b.addEventListener('click', () => {
+      if (Date.now() - difmodalOpenedAt < 350) return; // ignora ghost-click en móvil
       Sfx.click();
       aiDifficulty = b.dataset.dif;
       $('#difmodal').classList.add('hidden');

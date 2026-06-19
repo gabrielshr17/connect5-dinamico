@@ -169,12 +169,15 @@ body { display: flex; flex-direction: column; align-items: center; min-height: 1
   transform: translateZ(14px);
   display: flex; align-items: center; justify-content: center; font-size: 1.1em;
   box-shadow: 0 6px 10px rgba(0,0,0,.5), inset 0 -5px 8px rgba(0,0,0,.45), inset 0 5px 8px rgba(255,255,255,.55);
-  animation: drop .45s cubic-bezier(.34,1.56,.64,1);
 }
+.disc.falling { animation: fall var(--fall-dur, 0.35s) cubic-bezier(.3,1.5,.6,1); }
 .disc.p1 { background: radial-gradient(circle at 38% 30%, #ff85a3, var(--p1) 45%, var(--p1-d)); }
 .disc.p2 { background: radial-gradient(circle at 38% 30%, #fff0a8, var(--p2) 45%, var(--p2-d)); }
-@keyframes drop { 0% { transform: translateZ(14px) translateY(-560px) rotate(-25deg); }
-  70% { transform: translateZ(14px) translateY(0) rotate(4deg); } 100% { transform: translateZ(14px) translateY(0) rotate(0); } }
+@keyframes fall {
+  0%   { transform: translateZ(14px) translateY(var(--fall-from, -200px)) rotate(-20deg); }
+  75%  { transform: translateZ(14px) translateY(0) rotate(3deg); }
+  100% { transform: translateZ(14px) translateY(0) rotate(0); }
+}
 
 .disc.win { animation: winpulse .7s ease-in-out infinite; z-index: 3; }
 @keyframes winpulse { 0%,100% { transform: translateZ(30px) scale(1); box-shadow: 0 0 0 0 var(--accent), 0 8px 14px rgba(0,0,0,.5);}
