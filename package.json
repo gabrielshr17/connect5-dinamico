@@ -1,0 +1,15 @@
+{
+  "name": "connect5-dinamico",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "report": "vitest run --coverage && node scripts/generate-report.js"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^2.1.0",
+    "@vitest/ui": "^2.1.0",
+    "vitest": "^2.1.0"
+  }
+}
