@@ -4,3 +4,7 @@ node_modules/
 .vscode/
 .idea/
 .claude/
+coverage/
+html-report/
+test-results.json
+test-report.html
